@@ -22,6 +22,7 @@ REDUCED_FOOTER_FILES = [
 
 EXCLUDE_PATHS = []
 
+
 def main():
     parser = argparse.ArgumentParser(description='gilde-decoder')
     parser.add_argument('-i', '--input', help='Input path. Can either be the objects.bin file, in which case all bgf '
@@ -71,6 +72,7 @@ def main():
         # Since a single bgf was given, we can just decode it
         file_paths = [os.path.abspath(args.input)]
     decode_bgf_files(file_paths, args.output)
+
 
 def decode_bgf_files(file_paths: List[str], output_path: str):
     bgfs = []
@@ -124,6 +126,7 @@ def decode_bgf_files(file_paths: List[str], output_path: str):
         mtl_file_path = os.path.join(obj_path, mtl_file_name)
         convert_object(vertices, faces, normals, texture_mappings, obj_file_path, mtl_file_name, materials)
         write_mtl(bgf["textures"], mtl_file_path)
+
 def decode_bgf(input_path: str) -> dict:
     bgf = {
         "path": input_path,
@@ -148,6 +151,7 @@ def decode_bgf(input_path: str) -> dict:
     
     return bgf
 
+
 # Helper methods
 
 def read_string(file: BinaryIO) -> str:
@@ -157,6 +161,7 @@ def read_string(file: BinaryIO) -> str:
         value += buffer.decode(STRING_CODEC)
         buffer = file.read(1)
     return value
+
 
 def is_value(
     file: BinaryIO, 
@@ -202,6 +207,7 @@ def is_value(
 
     return is_equal
 
+
 def skip_optional(file: BinaryIO, value: bytes, padding: int) -> bool:
     read_value = file.read(len(value))
     file.seek(-len(value), os.SEEK_CUR)
@@ -212,6 +218,7 @@ def skip_optional(file: BinaryIO, value: bytes, padding: int) -> bool:
     file.seek(padding, os.SEEK_CUR)
     return True
 
+
 def skip_required(file: BinaryIO, value: bytes, padding: int) -> None:
     read_value = file.read(len(value))
     file.seek(-len(value), os.SEEK_CUR)
@@ -220,17 +227,21 @@ def skip_required(file: BinaryIO, value: bytes, padding: int) -> None:
 
     file.seek(padding, os.SEEK_CUR)
 
+
 def skip_zero(file: BinaryIO, length: int) -> None:
     for _ in range(length):
         assert int.from_bytes(file.read(1), byteorder='little', signed=False) == 0, f"Expected 0, got {int.from_bytes(file.read(1), byteorder='little', signed=False)}"
+
 
 def skip_until(file: BinaryIO, value: int, length: int) -> None:
     while not is_value(file, length, value, reset=True):
         file.seek(1, os.SEEK_CUR)
     file.seek(1, os.SEEK_CUR)
 
+
 def is_latin_1(value: int) -> bool:
     return 0x20 <= value <= 0x7E
+
 
 def find_address_of_byte_pattern(pattern: bytes, data: bytes) -> int:
     if not pattern or not data:
@@ -245,6 +256,7 @@ def find_address_of_byte_pattern(pattern: bytes, data: bytes) -> int:
             occurrences.append(i)
 
     return occurrences
+
 
 def subtract_path(base_path, target_path):
     base_path = os.path.normpath(base_path)  # Normalize the path to remove redundant separators
@@ -261,6 +273,7 @@ def subtract_path(base_path, target_path):
 
     return relative_path
 
+
 def sanitize_filename(path, replacement='_'):
     # Define a set of illegal characters for Windows and Unix-based systems
     illegal_characters = r'<>:"/\|?*'
@@ -271,6 +284,7 @@ def sanitize_filename(path, replacement='_'):
     sanitized_path = re.sub(f'[{re.escape(illegal_characters)}]', replacement, path)
 
     return sanitized_path
+
 
 # Checker functions
 
@@ -285,6 +299,7 @@ def is_texture(file: BinaryIO) -> bool:
     file.seek(initial_pos, os.SEEK_SET)
 
     return is_texture
+
 
 def is_game_object(file: BinaryIO) -> bool:
     initial_pos = file.tell()
@@ -301,6 +316,7 @@ def is_game_object(file: BinaryIO) -> bool:
 
     return is_obj
 
+
 # Low level structs
 
 def decode_vertex(file: BinaryIO) -> tuple[float, float, float]:
@@ -309,16 +325,19 @@ def decode_vertex(file: BinaryIO) -> tuple[float, float, float]:
     z = struct.unpack('<f', file.read(4))[0]
     return (x, y, z)
 
+
 def decode_vertex_mapping(file: BinaryIO) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
     vertex1 = decode_vertex(file)
     vertex2 = decode_vertex(file)
     return (vertex1, vertex2)
+
 
 def decode_face(file: BinaryIO) -> tuple[int, int, int]:
     a = int.from_bytes(file.read(4), byteorder='little', signed=False)
     b = int.from_bytes(file.read(4), byteorder='little', signed=False)
     c = int.from_bytes(file.read(4), byteorder='little', signed=False)
     return (a, b, c)
+
 
 def decode_polygon(file: BinaryIO) -> dict:
     polygon = {}
@@ -345,6 +364,7 @@ def decode_polygon(file: BinaryIO) -> dict:
 
     return polygon
 
+
 def decode_polygon_mapping(file: BinaryIO) -> dict:
     polygon_mapping = {}
 
@@ -355,6 +375,7 @@ def decode_polygon_mapping(file: BinaryIO) -> dict:
     polygon_mapping["texture_index"] = int.from_bytes(file.read(1), byteorder='little', signed=False)
 
     return polygon_mapping
+
 
 # High level structs
 
@@ -383,6 +404,7 @@ def decode_bgf_header(file: BinaryIO) -> dict:
 
     return bgf_header
 
+
 def decode_texture(file: BinaryIO) -> dict:
     texture = {}
     
@@ -404,6 +426,7 @@ def decode_texture(file: BinaryIO) -> dict:
     skip_until(file, 0x28, 1)
 
     return texture
+
 
 def decode_model(file: BinaryIO) -> dict:
     model = {}
@@ -438,6 +461,7 @@ def decode_model(file: BinaryIO) -> dict:
 
     return model
 
+
 def decode_anim_data(file: BinaryIO) -> dict:
     anim_data = {}
     
@@ -456,6 +480,7 @@ def decode_anim_data(file: BinaryIO) -> dict:
     anim_data["z3"] = struct.unpack("<f", file.read(4))[0]
 
     return anim_data
+
 
 def decode_game_object(file: BinaryIO) -> dict:
     obj = {}
@@ -486,6 +511,7 @@ def decode_game_object(file: BinaryIO) -> dict:
     obj["anim_datas"] = anim_datas
 
     return obj
+
 
 def decode_mapping_object(file: BinaryIO) -> dict:
     mapping_object = {}
@@ -523,6 +549,7 @@ def decode_mapping_object(file: BinaryIO) -> dict:
     mapping_object["polygon_mappings"] = polygon_mappings
 
     return mapping_object
+
 
 # Footer structs
 
@@ -592,6 +619,7 @@ def is_valid_footer(bgf: dict, file: BinaryIO) -> bool:
 
     return is_valid
 
+
 def decode_anim_footer(file: BinaryIO) -> dict:
     anim_footer = {}
     
@@ -600,6 +628,7 @@ def decode_anim_footer(file: BinaryIO) -> dict:
     file.seek(27, os.SEEK_CUR)
 
     return anim_footer
+
 
 # Obj Conversion
 
