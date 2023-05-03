@@ -96,27 +96,30 @@ def decode_bgf_files(file_paths: List[str], output_path: str):
         if not os.path.exists(obj_path):
             os.makedirs(obj_path)
 
-        vertices = [vertex_mapping[0] for vertex_mapping in bgf["mapping_object"]["vertex_mappings"]]
-        faces = [polygon_mapping["face"] for polygon_mapping in bgf["mapping_object"]["polygon_mappings"]]
-        normals = [polygon_mapping["v3"] for polygon_mapping in bgf["mapping_object"]["polygon_mappings"]]
-        num_models = len([x for x in bgf["game_objects"] if "model" in x])
-        if num_models > 1:
-            # print a warning
-            print(f'WARNING: Found {num_models} models in {bgf["path"]}, expected 1. Converting only the first model.')
-        # Some bgf files have multiple game objects, of which not all are models.
-        model_dict = next(x for x in bgf["game_objects"] if "model" in x)
-        polygons = model_dict["model"]["polygons"]
+        def is_model(game_object: dict) -> bool:
+            return "model" in game_object
 
-        texture_mappings: List[List[Tuple[float, float, float]]] = [[poly[x] for x in ("v1", "v2", "v3")] for poly in
-                                                                    polygons]
-        texture_indices = [poly["texture_index"] for poly in polygons]
-        materials = [material_name_from_texture_file_name(bgf["textures"][idx]["name"]) for idx in texture_indices]
+        # Some bgf files have multiple game objects, of which not all are models.
+        models: List[Dict] = [ob for ob in bgf["game_objects"] if is_model(ob)]
+        vertices: List[List[Tuple[float, float, float]]] = [go["model"]["vertices"] for go in models]
+        polygons: List[Dict] = [go["model"]["polygons"] for go in models]
+        faces: List[List[Tuple[float, float, float]]] = [[entry["face"] for entry in poly] for poly in polygons]
+        normals = [[entry["normal"] for entry in poly] for poly in polygons]
+
+        polygons: List[List[Dict]] = [md["model"]["polygons"] for md in models]
+
+        texture_mappings: List[List[List[Tuple[float, float, float]]]] = [
+            [[el[x] for x in ("v1", "v2", "v3")] for el in poly]
+            for poly in
+            polygons]
+        texture_indices = [[el["texture_index"] for el in poly] for poly in polygons]
+        materials = [[material_name_from_texture_file_name(bgf["textures"][idx]["name"]) for idx in tex_idx] for tex_idx in texture_indices]
         # texture_mappings is a list of lists, every sublist containing three tuples which contains three floats like
         # [(x1, x2, x3), (y1, y2, y3), (n1, n2, n3)]
         # nX is a normal vector while xX and yX are u, v texture coordinates
         # Tranform this into a list of lists with every sublist containing three tuples like
         # [(x1, y1, n1), (x2, y2, n2), (x3, y3, n3)]
-        texture_mappings = [[(x[i], y[i], n[i]) for i in range(3)] for x, y, n in texture_mappings]
+        texture_mappings = [[[(x[i], y[i], n[i]) for i in range(3)] for x, y, n in tm] for tm in texture_mappings]
 
         # Get filename from bgf path so every obj/mtl file has the same name as the bgf file
         filename = os.path.splitext(os.path.basename(bgf["path"]))[0]
@@ -636,35 +639,36 @@ def convert_object(vertices: list[tuple[int]], faces: list[tuple[int]], normals:
                    texture_mappings: List[Tuple[float, float, float]], output_path: str, mtl_file_name: str,
                    materials: List[str]) -> None:
     with open(output_path, 'w') as file:
-        file.write("g test\n")
         file.write(f"mtllib {mtl_file_name}\n")
 
-        # Write vertices
-        for (x, y, z) in vertices:
-            file.write(f"v {x} {y} {z}\n")
+        for i in range(len(faces)):
+            file.write(f"g group{i}\n")
 
-        if len(faces) != len(normals):
-            print("WARNING: Number of faces and normals don't match, aborting obj conversion")
-            return
-        if len(faces) != len(materials):
-            print("WARNING: Number of faces and materials don't match, aborting obj conversion")
-            return
+            # Write vertices
+            for (x, y, z) in vertices[i]:
+                file.write(f"v {x} {y} {z}\n")
 
-        # Write normals
-        for i in range(len(normals)):
-            (x, y, z) = normals[i]
-            file.write(f"vn {x} {y} {z}\n")
+            if len(faces[i]) != len(normals[i]):
+                print("WARNING: Number of faces and normals don't match, aborting obj conversion")
+                return
+            if len(faces[i]) != len(materials[i]):
+                print("WARNING: Number of faces and materials don't match, aborting obj conversion")
+                return
 
-        # Write texture coordinates
-        for coord in texture_mappings:
-            for (x, y, _) in coord:
-                # Since this is a 2D texture, the z coordinate (w) is always 0
-                file.write(f"vt {x} {y} 0\n")
+            # Write normals
+            for (x, y, z) in normals[i]:
+                file.write(f"vn {x} {y} {z}\n")
 
-        # Write faces (their vertices, their texture coordinates and their normals)
-        for i, ((v1, v2, v3), material) in enumerate(zip(faces, materials)):
-            file.write(f"usemtl {material}\n")
-            file.write(f"f {v1 + 1}/{i*3+1}/{i + 1} {v2 + 1}/{i*3+2}/{i + 1} {v3 + 1}/{i*3+3}/{i + 1}\n")
+            # Write texture coordinates
+            for coord in texture_mappings[i]:
+                for (x, y, _) in coord:
+                    # Since this is a 2D texture, the z coordinate (w) is always 0
+                    file.write(f"vt {x} {y} 0\n")
+
+            # Write faces (their vertices, their texture coordinates and their normals)
+            for j, ((v1, v2, v3), material) in enumerate(zip(faces[i], materials[i])):
+                file.write(f"usemtl {material}\n")
+                file.write(f"f {v1 + 1}/{j*3+1}/{j + 1} {v2 + 1}/{j*3+2}/{j + 1} {v3 + 1}/{j*3+3}/{j + 1}\n")
 
 
 def material_name_from_texture_file_name(texture_file_name: str) -> str:
